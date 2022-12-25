@@ -23,7 +23,7 @@ class CaptureThread(Thread):
             self.queue.get_nowait()
             self.queue.put_nowait(frame)
     finally:
-      finished = True
+      self.finished = True
       cap.release()
   def isFinished(self):
     return self.finished
