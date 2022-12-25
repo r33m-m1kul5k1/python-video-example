@@ -2,7 +2,7 @@ from cv2 import VideoCapture, putText, imshow, waitKey, FONT_HERSHEY_COMPLEX_SMA
 from threading import Thread
 from queue import Queue, Full, Empty
 from argparse import ArgumentParser
-import socket, select, json
+import socket, select, json, os
 
 class CaptureThread(Thread):
   def __init__(self, uri: str, queue: Queue):
@@ -13,16 +13,18 @@ class CaptureThread(Thread):
     self.finished = False
   def run(self):
     cap = VideoCapture(self.uri)
-    while cap.isOpened() and not self.closed:
-      ret, frame = cap.read()
-      if ret:
-        try:
-          self.queue.put_nowait(frame)
-        except Full:
-          self.queue.get_nowait()
-          self.queue.put_nowait(frame)
-    finished = True
-    print('capture thread exited')
+    try:
+      while cap.isOpened() and not self.closed:
+        ret, frame = cap.read()
+        if ret:
+          try:
+            self.queue.put_nowait(frame)
+          except Full:
+            self.queue.get_nowait()
+            self.queue.put_nowait(frame)
+    finally:
+      finished = True
+      cap.release()
   def isFinished(self):
     return self.finished
   def close(self):
@@ -38,15 +40,17 @@ class TelemetryThread(Thread):
     self.latest = None
   def run(self):
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.setblocking(0)
-    s.bind(('127.0.0.1', self.port))
-    while not self.closed:
-      ready = select.select([s], [], [], 1)
-      if ready[0]:
-        data, addr = s.recvfrom(self.bufsize)
-        self.latest = data
-    self.finished = True
-    print("telemetry thread exited")
+    try:
+      s.setblocking(0)
+      s.bind(('127.0.0.1', self.port))
+      while not self.closed:
+        ready = select.select([s], [], [], 1)
+        if ready[0]:
+          data, addr = s.recvfrom(self.bufsize)
+          self.latest = data
+    finally:
+      self.finished = True
+      s.close()
   def isFinished(self):
     return self.finished
   def getLatestAsDict(self):
@@ -61,6 +65,9 @@ if __name__ == '__main__':
   parser.add_argument('--telemetry-port', type=int, default=9707, help='The UDP port to listen on for telemetry.')
   parser.add_argument('--telemetry-bufsize', type=int, default=10240, help='The buffer size for a single telemetry message.')
   ns = parser.parse_args()
+
+  # If you've buily opencv with cuvid support, or support for another hardware decoder, specify it here:
+  # os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "video_codec;h264_cuvid"
   
   closing = False
   while not closing:
