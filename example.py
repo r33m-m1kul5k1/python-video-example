@@ -26,7 +26,8 @@ class CaptureThread(Thread):
                     try:
                         self.queue.put_nowait(frame)
                     except Full:
-                        self.queue.get_nowait()
+                        # dequeue the first frame and input the new frame #
+                        self.queue.get_nowait() 
                         self.queue.put_nowait(frame)
         finally:
             self.finished = True
@@ -98,6 +99,7 @@ if __name__ == '__main__':
     closing = False
     while not closing:
         capture_queue = Queue(2)
+        # The example assums that the streamer runs on localhost... #
         capture_thread = CaptureThread('tcp://127.0.0.1:{}?listen'.format(ns.video_port), capture_queue)
         telemetry_thread = TelemetryThread(ns.telemetry_port, ns.telemetry_bufsize)
 
